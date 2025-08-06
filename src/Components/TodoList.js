@@ -116,7 +116,7 @@ const TodoList = () => {
   const fetchTodosFromBackend = async (folderId) => {
     try {
       const response = await axios.get(
-        `http://127.0.0.1:8000/folders/${folderId}/todos/`,
+        `https://taskmanager-backend-5vyz.onrender.com/folders/${folderId}/todos/`,
         {
           headers: {
             Authorization: `Token ${localStorage.getItem("token")}`,
@@ -154,7 +154,7 @@ const TodoList = () => {
       setTodos(updatedTodos);
 
       await axios.put(
-        `http://127.0.0.1:8000/auth/todos/${id}/`,
+        `https://taskmanager-backend-5vyz.onrender.com/auth/todos/${id}/`,
         { completed: !todos.find((t) => t.id === id).completed },
         {
           headers: {
@@ -195,7 +195,7 @@ const TodoList = () => {
     try {
       // Call delete endpoint directly with password in the request body
       await axios.delete(
-        `http://127.0.0.1:8000/auth/todos/${passwordDialog.todoId}/`,
+        `https://taskmanager-backend-5vyz.onrender.com/auth/todos/${passwordDialog.todoId}/`,
         {
           headers: {
             Authorization: `Token ${localStorage.getItem("token")}`,
@@ -240,7 +240,10 @@ const TodoList = () => {
         config.data = { password: passwordDialog.password };
       }
 
-      await axios.delete(`http://127.0.0.1:8000/auth/todos/${id}/`, config);
+      await axios.delete(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/todos/${id}/`,
+        config
+      );
       setTodos(todos.filter((todo) => todo.id !== id));
       setSnackbar({
         open: true,
@@ -261,7 +264,7 @@ const TodoList = () => {
 
     try {
       const response = await axios.post(
-        "http://127.0.0.1:8000/auth/todos/",
+        "https://taskmanager-backend-5vyz.onrender.com/auth/todos/",
         {
           folder_id: folderId,
           title: newTodo.text,

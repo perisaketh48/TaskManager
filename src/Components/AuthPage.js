@@ -117,13 +117,16 @@ const AuthPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/auth/login/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await fetch(
+        "https://taskmanager-backend-5vyz.onrender.com/auth/login/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       const data = await response.json();
       if (response.ok) {
@@ -159,19 +162,22 @@ const AuthPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/auth/register/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-          phone,
-          email,
-          password,
-        }),
-      });
+      const response = await fetch(
+        "https://taskmanager-backend-5vyz.onrender.com/auth/register/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName,
+            phone,
+            email,
+            password,
+          }),
+        }
+      );
 
       const data = await response.json();
       if (response.ok) {

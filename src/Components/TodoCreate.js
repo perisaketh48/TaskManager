@@ -36,7 +36,7 @@ const TodoCreate = () => {
       try {
         setLoading(true);
         const response = await axios.get(
-          "http://127.0.0.1:8000/auth/folders/",
+          "https://taskmanager-backend-5vyz.onrender.com/auth/folders/",
           {
             headers: {
               Authorization: `Token ${localStorage.getItem("token")}`,
@@ -63,7 +63,7 @@ const TodoCreate = () => {
     e.preventDefault();
     try {
       const response = await axios.post(
-        "http://127.0.0.1:8000/auth/todos/",
+        "https://taskmanager-backend-5vyz.onrender.com/auth/todos/",
         {
           title: task.name,
           description: task.description,

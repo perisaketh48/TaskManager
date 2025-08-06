@@ -86,7 +86,7 @@ const Dashboard = () => {
     const fetchFolders = async () => {
       try {
         const response = await axios.get(
-          "http://127.0.0.1:8000/auth/folders/", // Updated endpoint
+          "https://taskmanager-backend-5vyz.onrender.com/auth/folders/", // Updated endpoint
           {
             headers: {
               Authorization: `Token ${localStorage.getItem("token")}`,
@@ -122,7 +122,7 @@ const Dashboard = () => {
     setCreatingFolder(true);
     try {
       const response = await axios.post(
-        "http://127.0.0.1:8000/auth/folders/", // Updated endpoint
+        "https://taskmanager-backend-5vyz.onrender.com/auth/folders/", // Updated endpoint
         {
           name: newFolder.name,
           locked: newFolder.locked,
@@ -174,7 +174,7 @@ const Dashboard = () => {
       const requestData = password ? { password } : null;
 
       const response = await axios.post(
-        `http://127.0.0.1:8000/auth/folders/${folderId}/todos/`,
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/todos/`,
         requestData,
         config
       );
@@ -208,7 +208,7 @@ const Dashboard = () => {
   const verifyFolderPassword = async () => {
     try {
       const response = await axios.post(
-        `http://127.0.0.1:8000/auth/folders/${passwordDialog.folderId}/todos/`,
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${passwordDialog.folderId}/todos/`,
         { password: passwordDialog.password },
         {
           headers: {
