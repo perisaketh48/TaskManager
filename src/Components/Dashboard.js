@@ -73,7 +73,18 @@ const Dashboard = () => {
     return colors[Math.floor(Math.random() * colors.length)];
   };
 
-  // Handle snackbar close
+  useEffect(() => {
+    const hasNavigated = sessionStorage.getItem("hasNavigatedAfterLogin");
+
+    if (hasNavigated) {
+      // Remove the flag to prevent a future reload
+      sessionStorage.removeItem("hasNavigatedAfterLogin");
+
+      // Trigger the reload
+      window.location.reload();
+    }
+  }, [navigate]);
+
   const handleCloseSnackbar = (event, reason) => {
     if (reason === "clickaway") {
       return;
@@ -111,6 +122,7 @@ const Dashboard = () => {
           severity: "error",
         });
       } finally {
+        localStorage.removeItem("currentFolder");
         setLoading(false);
       }
     };
@@ -179,24 +191,21 @@ const Dashboard = () => {
         config
       );
 
-      console.log("API Response:", response.data); // Debug the response
-
       const currentFolder = folders.find((f) => f.id === folderId) || {};
 
       navigate("/todo-list", {
         state: {
           folderId: folderId,
-          todos: Array.isArray(response.data.todos) ? response.data.todos : [], // Ensure it's always an array
+          todos: Array.isArray(response.data.todos) ? response.data.todos : [],
           folderData: {
             ...currentFolder,
             id: folderId,
             name: currentFolder.name || "Untitled Folder",
           },
         },
-        replace: true,
       });
     } catch (err) {
-      console.error("Error fetching todos:", err); // Better error logging
+      console.error("Error fetching todos:", err);
       setSnackbar({
         open: true,
         message: err.response?.data?.error || "Failed to fetch folder contents",
@@ -207,8 +216,8 @@ const Dashboard = () => {
 
   const verifyFolderPassword = async () => {
     try {
-      const response = await axios.post(
-        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${passwordDialog.folderId}/todos/`,
+      await axios.post(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${passwordDialog.folderId}/verify/`,
         { password: passwordDialog.password },
         {
           headers: {
@@ -217,25 +226,18 @@ const Dashboard = () => {
         }
       );
 
-      const currentFolder =
-        folders.find((f) => f.id === passwordDialog.folderId) || {};
+      // If verification succeeds, fetch the todos
+      fetchFolderTodos(passwordDialog.folderId, passwordDialog.password);
 
-      navigate("/todo-list", {
-        state: {
-          folderId: passwordDialog.folderId,
-          todos: response.data.todos || [],
-          folderData: {
-            ...currentFolder,
-            id: passwordDialog.folderId,
-            name: currentFolder.name || "Untitled Folder",
-          },
-        },
-        replace: true, // Add this to prevent adding to history stack
+      // Close the dialog
+      setPasswordDialog({
+        ...passwordDialog,
+        open: false,
       });
     } catch (err) {
       setPasswordDialog({
         ...passwordDialog,
-        error: err.response?.data?.error || "Invalid password",
+        error: err.response?.data?.message || "Invalid password",
       });
     }
   };
@@ -248,7 +250,7 @@ const Dashboard = () => {
   };
 
   // Handle folder click
-  const handleFolderClick = (folder) => {
+  const handleFolderClick = async (folder) => {
     if (folder.locked) {
       setPasswordDialog({
         open: true,
@@ -256,10 +258,27 @@ const Dashboard = () => {
         password: "",
         error: "",
       });
-    } else {
-      // For unlocked folders, just pass the folderId
-      fetchFolderTodos(folder.id);
+      return;
     }
+
+    // 1. Create a complete data package
+    const folderData = {
+      folderId: folder.id,
+      folderData: folder,
+      todos: [],
+      timestamp: Date.now(),
+    };
+
+    // 2. Persist to localStorage first
+    localStorage.setItem("currentFolder", JSON.stringify(folderData));
+
+    // 3. Add a small delay to ensure state persistence
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 4. Navigate with both state and URL param
+    navigate(`/todo-list/${folder.id}`, {
+      state: folderData,
+    });
   };
 
   // Toggle password visibility
@@ -571,6 +590,8 @@ const Dashboard = () => {
       <Dialog
         open={openModal}
         onClose={() => setOpenModal(false)}
+        aria-labelledby="modal-title"
+        aria-modal="true"
         PaperProps={{
           sx: {
             borderRadius: "16px",
@@ -818,6 +839,8 @@ const Dashboard = () => {
 
       {/* Password Verification Dialog */}
       <Dialog
+        aria-labelledby="modal-title"
+        aria-modal="true"
         open={passwordDialog.open}
         onClose={() => setPasswordDialog({ ...passwordDialog, open: false })}
         PaperProps={{

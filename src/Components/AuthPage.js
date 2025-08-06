@@ -137,6 +137,7 @@ const AuthPage = () => {
           severity: "success",
         });
         setInterval(() => {
+          sessionStorage.setItem("hasNavigatedAfterLogin", "true");
           navigate("/dashboard");
         }, 2000);
       } else {

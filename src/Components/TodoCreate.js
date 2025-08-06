@@ -15,6 +15,7 @@ import {
 } from "@mui/icons-material";
 import Header from "./Header";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const TodoCreate = () => {
   const [task, setTask] = useState({
@@ -28,10 +29,16 @@ const TodoCreate = () => {
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
+  const navigate = useNavigate();
   const priorities = ["Low", "Medium", "High"];
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/", { replace: true });
+      return;
+    }
+
     const fetchFolders = async () => {
       try {
         setLoading(true);
@@ -39,15 +46,58 @@ const TodoCreate = () => {
           "https://taskmanager-backend-5vyz.onrender.com/auth/folders/",
           {
             headers: {
-              Authorization: `Token ${localStorage.getItem("token")}`,
+              Authorization: `Token ${token}`,
+            },
+          }
+        );
+        setFolders(response.data);
+      } catch (err) {
+        console.error("Error fetching folders:", err);
+        setError(err.response?.data?.message || "Failed to fetch folders");
+
+        if (err.response?.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/", { replace: true });
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFolders();
+  }, [navigate]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      console.error("No token found, cannot fetch folders");
+      setError("Authentication required");
+      return;
+    }
+
+    const fetchFolders = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(
+          "https://taskmanager-backend-5vyz.onrender.com/auth/folders/",
+          {
+            headers: {
+              Authorization: `Token ${token}`,
             },
           }
         );
         setFolders(response.data);
         setLoading(false);
       } catch (err) {
+        console.error("Error fetching folders:", err);
+        console.error("Error response:", err.response);
         setError(err.response?.data?.message || "Failed to fetch folders");
         setLoading(false);
+
+        if (err.response?.status === 401) {
+          localStorage.removeItem("token");
+        }
       }
     };
 
@@ -61,23 +111,33 @@ const TodoCreate = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.error("No token found during submission");
+      setError("Authentication required");
+      return;
+    }
+
     try {
+      const payload = {
+        title: task.name,
+        description: task.description,
+        folder_id: task.folder,
+        due_date: task.dueDate,
+        priority: task.priority.toLowerCase(),
+      };
+
       const response = await axios.post(
         "https://taskmanager-backend-5vyz.onrender.com/auth/todos/",
-        {
-          title: task.name,
-          description: task.description,
-          folder_id: task.folder,
-          due_date: task.dueDate,
-          priority: task.priority.toLowerCase(),
-        },
+        payload,
         {
           headers: {
-            Authorization: `Token ${localStorage.getItem("token")}`,
+            Authorization: `Token ${token}`,
           },
         }
       );
-      console.log("Task created:", response.data);
+
       // Reset form after successful submission
       setTask({
         name: "",
@@ -86,8 +146,17 @@ const TodoCreate = () => {
         dueDate: "",
         priority: "",
       });
+
+      // Show success message or redirect
+      setError(null);
     } catch (err) {
       console.error("Error creating task:", err);
+      console.error("Error response:", err.response);
+      setError(err.response?.data?.message || "Failed to create task");
+
+      if (err.response?.status === 401) {
+        localStorage.removeItem("token");
+      }
     }
   };
 

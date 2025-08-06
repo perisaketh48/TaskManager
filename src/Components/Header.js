@@ -4,6 +4,13 @@ import { useNavigate } from "react-router-dom";
 
 const Header = () => {
   const navigate = useNavigate();
+
+  const handleNavigation = (path) => {
+    if (window.location.pathname !== path) {
+      navigate(path);
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -35,7 +42,7 @@ const Header = () => {
           </svg>
         </Box>
         <Typography
-          onClick={() => (localStorage.removeItem("token"), navigate("/"))}
+          onClick={() => (localStorage.clear(), handleNavigation("/"))}
           variant="h6"
           sx={{
             cursor: "pointer",
@@ -61,7 +68,7 @@ const Header = () => {
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Typography
-            onClick={() => navigate("/dashboard")}
+            onClick={() => handleNavigation("/dashboard")}
             sx={{
               cursor: "pointer",
               color: "#0d141c",
@@ -72,7 +79,7 @@ const Header = () => {
             Home
           </Typography>
           <Typography
-            onClick={() => navigate("/todo-create")}
+            onClick={() => handleNavigation("/todo-create")}
             sx={{
               cursor: "pointer",
               color: "#0d141c",

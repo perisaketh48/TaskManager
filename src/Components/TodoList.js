@@ -32,14 +32,16 @@ import {
   VisibilityOff,
 } from "@mui/icons-material";
 import { PlusCircle } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import Header from "./Header";
 
 const TodoList = () => {
+  const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState([]);
   const [expanded, setExpanded] = useState(null);
   const [openModal, setOpenModal] = useState(false);
@@ -50,7 +52,11 @@ const TodoList = () => {
     dueDate: "",
     priority: "medium",
   });
-  const [folderData, setFolderData] = useState({});
+  const [folderData, setFolderData] = useState({
+    id: null,
+    name: "My Todos",
+    locked: false,
+  });
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -64,59 +70,122 @@ const TodoList = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleClickShowPassword = () => setShowPassword(!showPassword);
-  const handleMouseDownPassword = (e) => e.preventDefault();
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          navigate("/");
+          return;
+        }
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
+        let data = location.state;
+        if (!data) {
+          const saved = localStorage.getItem("currentFolder");
+          if (saved) data = JSON.parse(saved);
+        }
 
-  const handleAccordionChange = (id) => (event, isExpanded) => {
-    setExpanded(isExpanded ? id : null);
-  };
+        if (!data && id) {
+          data = {
+            folderId: id,
+            folderData: {},
+            todos: [],
+          };
+        }
+
+        if (!data?.folderId) {
+          throw new Error("No folder data available");
+        }
+
+        setFolderId(data.folderId);
+        setFolderData(data.folderData || {});
+        setTodos(data.todos || []);
+
+        await fetchTodosFromBackend(data.folderId);
+        setIsReady(true);
+        setLoading(false);
+      } catch (error) {
+        console.error("Initialization error:", error);
+        navigate("/dashboard");
+      }
+    };
+
+    initialize();
+  }, [id, location.state, navigate]);
 
   useEffect(() => {
-    console.log("Location state:", location.state);
-
-    const folderIdFromUrl = new URLSearchParams(location.search).get(
-      "folderId"
-    );
-
-    // Priority 1: Use location.state if available
-    if (location.state?.folderId) {
-      const {
-        folderId: stateFolderId,
-        todos: initialTodos = [],
-        folderData: fd = {},
-      } = location.state;
-
-      console.log("Received todos:", initialTodos);
-
-      setFolderId(stateFolderId);
-      setFolderData(fd);
-      setTodos(initialTodos || []);
-      setLoading(false);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/");
     }
-    // Priority 2: Use folderId from URL if available
-    else if (folderIdFromUrl) {
-      setFolderId(folderIdFromUrl);
-      setLoading(true);
-      fetchTodosFromBackend(folderIdFromUrl);
-    }
-    // Only redirect if we have absolutely no information
-    else {
-      console.log("No folder info at all - redirecting to dashboard");
-      navigate("/dashboard");
-    }
-  }, [location, navigate]);
+  }, [navigate]);
 
   const fetchTodosFromBackend = async (folderId) => {
     try {
-      const response = await axios.get(
-        `https://taskmanager-backend-5vyz.onrender.com/folders/${folderId}/todos/`,
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/");
+        return;
+      }
+
+      const response = await axios.post(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/todos/`,
+        {},
+        {
+          headers: {
+            Authorization: `Token ${token}`,
+          },
+        }
+      );
+
+      const todosData = response.data.todos || [];
+      setTodos(todosData);
+
+      // Update localStorage
+      const currentData =
+        JSON.parse(localStorage.getItem("currentFolder")) || {};
+      localStorage.setItem(
+        "currentFolder",
+        JSON.stringify({
+          ...currentData,
+          todos: todosData,
+          lastUpdated: Date.now(),
+        })
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Fetch error:", error);
+
+      if (error.response?.status === 401) {
+        // Handle token expiration
+        if (error.response.data?.error?.includes("token")) {
+          localStorage.removeItem("token");
+          navigate("/");
+          return false;
+        }
+        // Handle password protected folders
+        if (error.response.data?.error?.includes("password")) {
+          setPasswordDialog({ open: true });
+          return false;
+        }
+      }
+
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.error || "Failed to fetch todos",
+        severity: "error",
+      });
+      return false;
+    }
+  };
+
+  const handlePasswordVerified = async () => {
+    try {
+      // Verify the password first
+      const verifyResponse = await axios.post(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/verify/`,
+        { password: passwordDialog.password },
         {
           headers: {
             Authorization: `Token ${localStorage.getItem("token")}`,
@@ -124,26 +193,60 @@ const TodoList = () => {
         }
       );
 
-      const todosArray = Array.isArray(response.data.todos)
-        ? response.data.todos
-        : Array.isArray(response.data)
-        ? response.data
-        : [];
+      // If verification succeeds, fetch todos with password
+      const response = await axios.post(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/todos/`,
+        { password: passwordDialog.password },
+        {
+          headers: {
+            Authorization: `Token ${localStorage.getItem("token")}`,
+          },
+        }
+      );
 
-      setTodos(todosArray);
-      setLoading(false);
-    } catch (err) {
-      console.error("Error fetching todos:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch todos",
-        severity: "error",
+      const todosData = Array.isArray(response.data.todos)
+        ? response.data.todos
+        : [];
+      setTodos(todosData);
+
+      // Update localStorage
+      const currentFolder =
+        JSON.parse(localStorage.getItem("currentFolder")) || {};
+      localStorage.setItem(
+        "currentFolder",
+        JSON.stringify({
+          ...currentFolder,
+          todos: todosData,
+        })
+      );
+
+      setPasswordDialog({
+        open: false,
+        password: "",
+        error: "",
+        todoId: null,
       });
-      setLoading(false);
+    } catch (err) {
+      setPasswordDialog({
+        ...passwordDialog,
+        error: err.response?.data?.message || "Invalid password",
+      });
     }
   };
+  const handleAccordionChange = (id) => (event, isExpanded) => {
+    setExpanded(isExpanded ? id : null);
+  };
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
+  };
+  const handleClickShowPassword = () => setShowPassword(!showPassword);
 
-  const isEmptyState = todos.length === 0 && !loading && folderId;
+  const handleMouseDownPassword = (e) => e.preventDefault();
+
+  const isEmptyState = !loading && todos.length === 0;
 
   const handleToggle = async (event, id) => {
     event.stopPropagation();
@@ -193,36 +296,36 @@ const TodoList = () => {
 
   const verifyFolderPassword = async () => {
     try {
-      // Call delete endpoint directly with password in the request body
+      const config = {
+        headers: {
+          Authorization: `Token ${localStorage.getItem("token")}`,
+        },
+        data: {
+          password: passwordDialog.password,
+        },
+      };
+
       await axios.delete(
         `https://taskmanager-backend-5vyz.onrender.com/auth/todos/${passwordDialog.todoId}/`,
-        {
-          headers: {
-            Authorization: `Token ${localStorage.getItem("token")}`,
-          },
-          data: {
-            password: passwordDialog.password,
-          },
-        }
+        config
       );
 
-      // Remove the todo from state if successful
       setTodos(todos.filter((todo) => todo.id !== passwordDialog.todoId));
-      setSnackbar({
-        open: true,
-        message: "Todo deleted successfully",
-        severity: "success",
-      });
       setPasswordDialog({
         open: false,
         password: "",
         error: "",
         todoId: null,
       });
+      setSnackbar({
+        open: true,
+        message: "Todo deleted successfully",
+        severity: "success",
+      });
     } catch (err) {
       setPasswordDialog({
         ...passwordDialog,
-        error: err.response?.data?.message || "Failed to delete todo",
+        error: err.response?.data?.message || "Invalid password",
       });
     }
   };
@@ -259,19 +362,39 @@ const TodoList = () => {
     }
   };
 
+  const handleAddClick = () => {
+    if (folderData.locked) {
+      setPasswordDialog({
+        open: true,
+        password: "",
+        error: "",
+        todoId: null, // Using null to indicate this is for add operation
+      });
+    } else {
+      setOpenModal(true);
+    }
+  };
+
   const handleAddTodo = async () => {
     if (!newTodo.text.trim()) return;
 
     try {
+      const requestData = {
+        folder_id: folderId,
+        title: newTodo.text,
+        description: newTodo.description,
+        due_date: newTodo.dueDate,
+        priority: newTodo.priority,
+      };
+
+      // Add password if folder is locked
+      if (folderData.locked) {
+        requestData.password = passwordDialog.password;
+      }
+
       const response = await axios.post(
         "https://taskmanager-backend-5vyz.onrender.com/auth/todos/",
-        {
-          folder_id: folderId,
-          title: newTodo.text,
-          description: newTodo.description,
-          due_date: newTodo.dueDate,
-          priority: newTodo.priority,
-        },
+        requestData,
         {
           headers: {
             Authorization: `Token ${localStorage.getItem("token")}`,
@@ -279,7 +402,6 @@ const TodoList = () => {
         }
       );
 
-      await fetchTodosFromBackend(folderId);
       setTodos([...todos, response.data]);
       setNewTodo({
         text: "",
@@ -508,7 +630,7 @@ const TodoList = () => {
                 }}
               >
                 <Button
-                  onClick={() => setOpenModal(true)}
+                  onClick={handleAddClick}
                   sx={{
                     maxWidth: 480,
                     cursor: "pointer",
@@ -828,7 +950,7 @@ const TodoList = () => {
             pb: 1,
           }}
         >
-          Enter Folder Password
+          {passwordDialog.todoId ? "Delete Todo" : "Add Todo"} - Enter Password
         </DialogTitle>
         <DialogContent sx={{ px: 3, py: 2 }}>
           <TextField
