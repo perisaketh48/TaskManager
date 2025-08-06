@@ -1,14 +1,35 @@
-import { Box, Typography, IconButton } from "@mui/material";
-import { Bell as BellIcon } from "lucide-react"; // or use your preferred icon source
+import { Box, Typography, Chip, Avatar, Menu, MenuItem } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 const Header = () => {
   const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState(null);
+  const userEmail = localStorage.getItem("email") || "user@example.com";
+
+  const getInitials = (email) => {
+    const [name] = email.split("@");
+    return name.charAt(0).toUpperCase();
+  };
 
   const handleNavigation = (path) => {
     if (window.location.pathname !== path) {
       navigate(path);
     }
+  };
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    localStorage.clear();
+    handleNavigation("/");
+    handleMenuClose();
   };
 
   return (
@@ -64,6 +85,7 @@ const Header = () => {
           flex: 1,
           justifyContent: "flex-end",
           gap: 4,
+          alignItems: "center",
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -91,18 +113,81 @@ const Header = () => {
           </Typography>
         </Box>
 
+        {/* User Chip with Avatar and Menu */}
         <Box
-          sx={{
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            aspectRatio: "1/1",
-            width: 40,
-            borderRadius: "50%",
-            backgroundImage:
-              "url(https://lh3.googleusercontent.com/aida-public/AB6AXuCtIqHZ1mZqLfgWZZdFC4AKlfXnHaP76AVbRYVTxhTYTJNY8neBs4jD1HYAB3sAto5hKpecpCtefEeIr_2rSYiwWCTnHyeVasJCdLcPrdjRJLxTDgUE0HjDS1UXvbNIkLFz_SGGkab3E1BbWZeIFAlCYF_y9t5FnoQm8G2iNJQjo37mWBUDKT4Alw41tFsMvKUSHBKepvL-AGCDW_5zv4jbcM2g2tK0oRGT0NFZhxoWQm-qBYRo32PuKHXNKz4TesLTsBmxGafvTf4)",
-          }}
-        />
+          onMouseEnter={handleMenuOpen}
+          onMouseLeave={handleMenuClose}
+          sx={{ position: "relative" }}
+        >
+          <Chip
+            avatar={
+              <Avatar
+                sx={{
+                  bgcolor: "#7aa2cfff",
+                  color: "#ffffff",
+                  fontWeight: "bold",
+                  fontSize: "16px",
+                }}
+              >
+                {getInitials(userEmail)}
+              </Avatar>
+            }
+            label={userEmail}
+            variant="outlined"
+            sx={{
+              cursor: "pointer",
+              borderColor: "#e7edf4",
+              backgroundColor: "#f8fafc",
+              "& .MuiChip-label": {
+                color: "#0d141c",
+                fontSize: "14px",
+                fontWeight: "medium",
+              },
+            }}
+          />
+
+          {/* Dropdown Menu */}
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+            MenuListProps={{
+              onMouseLeave: handleMenuClose,
+              sx: { py: 0 },
+            }}
+            anchorOrigin={{
+              vertical: "bottom",
+              horizontal: "right",
+            }}
+            transformOrigin={{
+              vertical: "top",
+              horizontal: "right",
+            }}
+            sx={{
+              mt: 1,
+              "& .MuiPaper-root": {
+                boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.1)",
+                borderRadius: "8px",
+              },
+            }}
+          >
+            <MenuItem
+              onClick={handleLogout}
+              sx={{
+                color: "#0d141c",
+                fontSize: "14px",
+                fontWeight: "medium",
+                py: 1.5,
+                px: 2,
+                "&:hover": {
+                  backgroundColor: "#f3f6f9",
+                },
+              }}
+            >
+              Logout
+            </MenuItem>
+          </Menu>
+        </Box>
       </Box>
     </Box>
   );

@@ -23,6 +23,7 @@ import {
   Visibility,
   VisibilityOff,
   Lock as LockIcon,
+  Delete,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import Header from "./Header";
@@ -34,6 +35,17 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [openModal, setOpenModal] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    folderId: null,
+    folderName: "",
+  });
+  const [deletePasswordDialog, setDeletePasswordDialog] = useState({
+    open: false,
+    folderId: null,
+    password: "",
+    error: "",
+  });
   const [newFolder, setNewFolder] = useState({
     name: "",
     description: "",
@@ -241,6 +253,83 @@ const Dashboard = () => {
       });
     }
   };
+
+  const handleDeleteClick = (event, folder) => {
+    event.stopPropagation(); // Prevents the folder from opening
+    // Open the confirmation dialog
+    setDeleteConfirm({
+      open: true,
+      folderId: folder.id,
+      folderName: folder.name,
+    });
+  };
+
+  const handleDeleteFolder = async (folderId, password = null) => {
+    try {
+      const config = {
+        headers: {
+          Authorization: `Token ${localStorage.getItem("token")}`,
+        },
+        data: {
+          folder_id: folderId,
+          password: password,
+        },
+      };
+
+      await axios.delete(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/`,
+        config
+      );
+
+      // Update the folders state by filtering out the deleted folder
+      setFolders((prevFolders) =>
+        prevFolders.filter((folder) => folder.id !== folderId)
+      );
+
+      setDeleteConfirm({ open: false, folderId: null, folderName: "" });
+      setDeletePasswordDialog({
+        open: false,
+        folderId: null,
+        password: "",
+        error: "",
+      });
+
+      setSnackbar({
+        open: true,
+        message: "Folder deleted successfully!",
+        severity: "success",
+      });
+    } catch (err) {
+      if (
+        err.response?.status === 403 &&
+        err.response.data.error.includes("password")
+      ) {
+        // If the folder is locked, prompt for password
+        setDeleteConfirm({ open: false, folderId: null, folderName: "" }); // Close confirmation first
+        setDeletePasswordDialog({
+          open: true,
+          folderId: folderId,
+          password: "",
+          error: "",
+        });
+        return;
+      }
+
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to delete folder",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleVerifyAndDelete = async () => {
+    await handleDeleteFolder(
+      deletePasswordDialog.folderId,
+      deletePasswordDialog.password
+    );
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setNewFolder((prev) => ({
@@ -495,6 +584,30 @@ const Dashboard = () => {
                               />
                             </Box>
                           )}
+
+                          {/* Add the delete icon here */}
+                          <IconButton
+                            sx={{
+                              position: "absolute",
+                              width: "16px",
+                              height: "16px",
+                              bottom: 8, // Position it at the bottom
+                              right: 8, // Position it on the right
+                              backgroundColor: "rgba(255, 255, 255, 0.7)",
+                              "&:hover": {
+                                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                              },
+                            }}
+                            onClick={(e) => handleDeleteClick(e, folder)}
+                          >
+                            <Delete
+                              sx={{
+                                color: "#d32f2f",
+                                width: "13px",
+                                height: "13px",
+                              }}
+                            />
+                          </IconButton>
                         </Box>
 
                         <Box
@@ -586,7 +699,110 @@ const Dashboard = () => {
         </Box>
       </Box>
 
+      <Dialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ ...deleteConfirm, open: false })}
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "400px",
+            backgroundColor: "#ffffff",
+          },
+        }}
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the folder "
+            {deleteConfirm.folderName}"? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteConfirm({ ...deleteConfirm, open: false })}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => handleDeleteFolder(deleteConfirm.folderId)}
+            color="error"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Password Dialog (for locked folders) */}
+      <Dialog
+        open={deletePasswordDialog.open}
+        onClose={() =>
+          setDeletePasswordDialog({ ...deletePasswordDialog, open: false })
+        }
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "400px",
+            backgroundColor: "#ffffff",
+          },
+        }}
+      >
+        <DialogTitle>Delete Locked Folder</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This folder is locked. Please enter the password to delete it.
+          </Typography>
+          <TextField
+            fullWidth
+            placeholder="Enter password"
+            type={showPassword ? "text" : "password"}
+            value={deletePasswordDialog.password}
+            onChange={(e) =>
+              setDeletePasswordDialog({
+                ...deletePasswordDialog,
+                password: e.target.value,
+                error: "",
+              })
+            }
+            error={!!deletePasswordDialog.error}
+            helperText={deletePasswordDialog.error}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={handleClickShowPassword}
+                    onMouseDown={handleMouseDownPassword}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setDeletePasswordDialog({ ...deletePasswordDialog, open: false })
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleVerifyAndDelete}
+            disabled={!deletePasswordDialog.password}
+            color="error"
+          >
+            Confirm Deletion
+          </Button>
+        </DialogActions>
+      </Dialog>
       {/* Folder Creation Modal */}
+
       <Dialog
         open={openModal}
         onClose={() => setOpenModal(false)}
@@ -978,7 +1194,7 @@ const Dashboard = () => {
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert
           onClose={handleCloseSnackbar}
