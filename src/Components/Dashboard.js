@@ -24,6 +24,7 @@ import {
   VisibilityOff,
   Lock as LockIcon,
   Delete,
+  Edit,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import Header from "./Header";
@@ -35,6 +36,7 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [openModal, setOpenModal] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
     folderId: null,
@@ -51,6 +53,12 @@ const Dashboard = () => {
     description: "",
     locked: false,
     password: "",
+  });
+  const [editPasswordDialog, setEditPasswordDialog] = useState({
+    open: false,
+    folder: null,
+    password: "",
+    error: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -96,6 +104,28 @@ const Dashboard = () => {
       window.location.reload();
     }
   }, [navigate]);
+
+  const handleEditClick = (folder) => {
+    if (folder.locked) {
+      setEditPasswordDialog({
+        open: true,
+        folder,
+        password: "",
+        error: "",
+      });
+      return;
+    }
+
+    // Proceed with editing if folder is not locked
+    setEditingFolder(folder);
+    setNewFolder({
+      name: folder.name,
+      description: folder.description || "",
+      locked: folder.locked,
+      password: "",
+    });
+    setOpenModal(true);
+  };
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === "clickaway") {
@@ -187,6 +217,73 @@ const Dashboard = () => {
     }
   };
 
+  const handleUpdateFolder = async () => {
+    setCreatingFolder(true);
+    try {
+      const payload = {
+        folder_id: editingFolder.id,
+        name: newFolder.name,
+        description: newFolder.description,
+        locked: newFolder.locked,
+      };
+
+      if (newFolder.locked) {
+        if (newFolder.password) {
+          payload.password = newFolder.password;
+        }
+        // If folder was previously unlocked and now being locked
+        if (!editingFolder.locked) {
+          payload.current_password = ""; // No current password needed
+        }
+      }
+
+      const response = await axios.put(
+        "https://taskmanager-backend-5vyz.onrender.com/auth/folders/",
+        payload,
+        {
+          headers: {
+            Authorization: `Token ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      // Update the folder in state
+      setFolders((prev) =>
+        prev.map((folder) =>
+          folder.id === editingFolder.id
+            ? {
+                ...folder,
+                name: newFolder.name,
+                description: newFolder.description,
+                locked: newFolder.locked,
+                // Only update password if it was changed
+                password: newFolder.locked ? newFolder.password : null,
+              }
+            : folder
+        )
+      );
+
+      setOpenModal(false);
+      setEditingFolder(null);
+      setNewFolder({ name: "", description: "", locked: false, password: "" });
+
+      setSnackbar({
+        open: true,
+        message: "Folder updated successfully!",
+        severity: "success",
+      });
+    } catch (err) {
+      setError("Failed to update folder");
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || "Failed to update folder",
+        severity: "error",
+      });
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
   const fetchFolderTodos = async (folderId, password = null) => {
     try {
       const config = {
@@ -195,8 +292,17 @@ const Dashboard = () => {
         },
       };
 
-      const requestData = password ? { password } : null;
+      // First verify the password if the folder is locked
+      if (password) {
+        await axios.post(
+          `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/verify/`,
+          { password },
+          config
+        );
+      }
 
+      // Then fetch the todos
+      const requestData = password ? { password } : null;
       const response = await axios.post(
         `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/todos/`,
         requestData,
@@ -228,7 +334,7 @@ const Dashboard = () => {
 
   const verifyFolderPassword = async () => {
     try {
-      await axios.post(
+      const response = await axios.post(
         `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${passwordDialog.folderId}/verify/`,
         { password: passwordDialog.password },
         {
@@ -238,10 +344,9 @@ const Dashboard = () => {
         }
       );
 
-      // If verification succeeds, fetch the todos
-      fetchFolderTodos(passwordDialog.folderId, passwordDialog.password);
+      // Navigate to TodoList with the data
+      navigate(`/todo-list/${passwordDialog.folderId}`);
 
-      // Close the dialog
       setPasswordDialog({
         ...passwordDialog,
         open: false,
@@ -249,6 +354,41 @@ const Dashboard = () => {
     } catch (err) {
       setPasswordDialog({
         ...passwordDialog,
+        error: err.response?.data?.message || "Invalid password",
+      });
+    }
+  };
+
+  const verifyEditPassword = async () => {
+    try {
+      await axios.post(
+        `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${editPasswordDialog.folder.id}/verify/`,
+        { password: editPasswordDialog.password },
+        {
+          headers: {
+            Authorization: `Token ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      // If verification succeeds, proceed with editing
+      setEditingFolder(editPasswordDialog.folder);
+      setNewFolder({
+        name: editPasswordDialog.folder.name,
+        description: editPasswordDialog.folder.description || "",
+        locked: editPasswordDialog.folder.locked,
+        password: "",
+      });
+      setOpenModal(true);
+
+      // Close the dialog
+      setEditPasswordDialog({
+        ...editPasswordDialog,
+        open: false,
+      });
+    } catch (err) {
+      setEditPasswordDialog({
+        ...editPasswordDialog,
         error: err.response?.data?.message || "Invalid password",
       });
     }
@@ -272,10 +412,23 @@ const Dashboard = () => {
         },
         data: {
           folder_id: folderId,
-          password: password,
         },
       };
 
+      // First verify password if needed
+      if (password) {
+        await axios.post(
+          `https://taskmanager-backend-5vyz.onrender.com/auth/folders/${folderId}/verify/`,
+          { password },
+          {
+            headers: {
+              Authorization: `Token ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+      }
+
+      // Then delete the folder
       await axios.delete(
         `https://taskmanager-backend-5vyz.onrender.com/auth/folders/`,
         config
@@ -350,7 +503,6 @@ const Dashboard = () => {
       return;
     }
 
-    // 1. Create a complete data package
     const folderData = {
       folderId: folder.id,
       folderData: folder,
@@ -358,7 +510,6 @@ const Dashboard = () => {
       timestamp: Date.now(),
     };
 
-    // 2. Persist to localStorage first
     localStorage.setItem("currentFolder", JSON.stringify(folderData));
 
     // 3. Add a small delay to ensure state persistence
@@ -584,7 +735,6 @@ const Dashboard = () => {
                               />
                             </Box>
                           )}
-
                           {/* Add the delete icon here */}
                           <IconButton
                             sx={{
@@ -603,6 +753,32 @@ const Dashboard = () => {
                             <Delete
                               sx={{
                                 color: "#d32f2f",
+                                width: "13px",
+                                height: "13px",
+                              }}
+                            />
+                          </IconButton>
+
+                          <IconButton
+                            sx={{
+                              position: "absolute",
+                              width: "16px",
+                              height: "16px",
+                              bottom: 8,
+                              right: 32, // Positioned to the left of delete icon
+                              backgroundColor: "rgba(255, 255, 255, 0.7)",
+                              "&:hover": {
+                                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                              },
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(folder);
+                            }}
+                          >
+                            <Edit
+                              sx={{
+                                color: "#1976d2",
                                 width: "13px",
                                 height: "13px",
                               }}
@@ -827,7 +1003,7 @@ const Dashboard = () => {
             pb: 1,
           }}
         >
-          Create New Folder
+          {editingFolder ? "Edit Folder" : "Create New Folder"}
         </DialogTitle>
 
         <DialogContent sx={{ px: 3, py: 0 }}>
@@ -964,7 +1140,9 @@ const Dashboard = () => {
                 </Typography>
                 <TextField
                   fullWidth
-                  placeholder="Enter password"
+                  placeholder={
+                    editingFolder ? "Enter new password " : "Enter password"
+                  }
                   name="password"
                   type={showPassword ? "text" : "password"}
                   value={newFolder.password}
@@ -1011,11 +1189,142 @@ const Dashboard = () => {
                     },
                   }}
                 />
+                {editingFolder && editingFolder.locked && (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", mt: 1 }}
+                  >
+                    {newFolder.locked
+                      ? "Leave password blank to keep current password"
+                      : "Folder will be unlocked if you uncheck this"}
+                  </Typography>
+                )}
               </Box>
             )}
           </Box>
         </DialogContent>
 
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setOpenModal(false);
+              setEditingFolder(null);
+              setNewFolder({
+                name: "",
+                description: "",
+                locked: false,
+                password: "",
+              });
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={editingFolder ? handleUpdateFolder : handleCreateFolder}
+            disabled={
+              !newFolder.name ||
+              (newFolder.locked && !newFolder.password) ||
+              creatingFolder
+            }
+          >
+            {creatingFolder ? (
+              <CircularProgress size={24} />
+            ) : editingFolder ? (
+              "Update Folder"
+            ) : (
+              "Create Folder"
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Password Verification Dialog */}
+      <Dialog
+        open={editPasswordDialog.open}
+        onClose={() =>
+          setEditPasswordDialog({ ...editPasswordDialog, open: false })
+        }
+        PaperProps={{
+          sx: {
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "400px",
+            backgroundColor: "#ffffff",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            color: "#0d141c",
+            fontSize: "20px",
+            fontWeight: "bold",
+            px: 3,
+            pt: 3,
+            pb: 1,
+          }}
+        >
+          Enter Folder Password
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, py: 2 }}>
+          <Typography sx={{ mb: 2 }}>
+            This folder is locked. Please enter the password to edit it.
+          </Typography>
+          <TextField
+            fullWidth
+            placeholder="Enter password"
+            type={showPassword ? "text" : "password"}
+            value={editPasswordDialog.password}
+            onChange={(e) =>
+              setEditPasswordDialog({
+                ...editPasswordDialog,
+                password: e.target.value,
+                error: "",
+              })
+            }
+            error={!!editPasswordDialog.error}
+            helperText={editPasswordDialog.error}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={handleClickShowPassword}
+                    onMouseDown={handleMouseDownPassword}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: "12px",
+                backgroundColor: "#f8fafc",
+                "& fieldset": {
+                  borderColor: "#d4dbe2",
+                },
+                "&:hover fieldset": {
+                  borderColor: "#d4dbe2",
+                },
+                "&.Mui-focused fieldset": {
+                  borderColor: "#0c77f2",
+                  borderWidth: "1px",
+                },
+              },
+              "& .MuiInputBase-input": {
+                color: "#0d141c",
+                fontSize: "16px",
+                height: "48px",
+                padding: "0 16px",
+                "&::placeholder": {
+                  color: "#5c728a",
+                  opacity: 1,
+                },
+              },
+            }}
+          />
+        </DialogContent>
         <DialogActions
           sx={{
             px: 3,
@@ -1024,7 +1333,9 @@ const Dashboard = () => {
           }}
         >
           <Button
-            onClick={() => setOpenModal(false)}
+            onClick={() =>
+              setEditPasswordDialog({ ...editPasswordDialog, open: false })
+            }
             sx={{
               borderRadius: "8px",
               height: "40px",
@@ -1041,19 +1352,31 @@ const Dashboard = () => {
             Cancel
           </Button>
           <Button
-            onClick={handleCreateFolder}
-            disabled={
-              !newFolder.name ||
-              (newFolder.locked && !newFolder.password) ||
-              creatingFolder
-            }
+            onClick={verifyEditPassword}
+            disabled={!editPasswordDialog.password}
+            sx={{
+              borderRadius: "8px",
+              height: "40px",
+              textTransform: "none",
+              px: 2,
+              backgroundColor: "#0c77f2",
+              color: "#ffffff",
+              fontSize: "14px",
+              fontWeight: "bold",
+              "&:hover": {
+                backgroundColor: "#0a66d4",
+              },
+              "&:disabled": {
+                backgroundColor: "#e7edf4",
+                color: "#5c728a",
+              },
+            }}
           >
-            {creatingFolder ? <CircularProgress size={24} /> : "Create Folder"}
+            Continue
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Password Verification Dialog */}
       <Dialog
         aria-labelledby="modal-title"
         aria-modal="true"

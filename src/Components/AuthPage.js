@@ -261,7 +261,7 @@ const AuthPage = () => {
         position: "relative",
         display: "flex",
         width: "100%",
-        minHeight: "100%",
+        height: "100vh",
         flexDirection: "column",
         backgroundColor: "#f8fafc",
         fontFamily: "Inter, Noto Sans, sans-serif",
