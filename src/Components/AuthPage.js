@@ -125,7 +125,7 @@ const AuthPage = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ email, password }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -179,7 +179,7 @@ const AuthPage = () => {
             email,
             password,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -299,7 +299,7 @@ const AuthPage = () => {
               pt: 2.5,
             }}
           >
-            Welcome to TaskMaster
+            Welcome to Task Manager
           </Typography>
 
           {/* Tabs */}

@@ -102,7 +102,7 @@ const Header = () => {
             letterSpacing: "-0.015em",
           }}
         >
-          TaskMaster
+          Task Manager
         </Typography>
       </Box>
 
